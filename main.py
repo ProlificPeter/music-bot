@@ -13,7 +13,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
-CHANNEL_ID = os.getenv('DISCORD_CHANNEL_ID')
+CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 APPLE_KEY = os.getenv('APPLE_MUSIC_KEY')
 APPLE_TEAM = os.getenv('APPLE_MUSIC_TEAM')
 APPLE_SECRET = os.getenv('APPLE_MUSIC_SECRET')
@@ -223,7 +223,7 @@ async def on_message(message):
     # Check for Spotify URL, then check if it's in the dedicated channel
     if message.content.startswith(SPOTIFY_TRACK_URL_HEADER):
         if message.channel.id != CHANNEL_ID:
-            # print("URL posted outside of dedicated channel")
+            print("URL posted outside of dedicated channel")
             return
         message_text = await handleSpotifyLink(message.content, True)
         embed = discord.Embed(title=message_text, color=HEX_GREEN)
