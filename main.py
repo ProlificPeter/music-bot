@@ -34,8 +34,9 @@ HEX_GREEN = 0x00ff00
 HEX_BLUE = 0x0000ff
 HEX_YELLOW = 0xffff00
 
+# TODO: Move Command Handles to this function
 async def handleCommand(command, message):
-    print("handleCommand fired")
+    # print("handleCommand fired")
     matchSplit = command + " "
     cleanedMessage = message.content.split(matchSplit)
     match command:
@@ -126,17 +127,19 @@ async def getMusicUrlFromTitleAndArtist(title, artist):
     searchTerm = title + " " + artist
     returnString = ""
     backupString = ""
-    # print(searchTerm)
     results = am.search(searchTerm, types=['songs'], limit=20)
-    if len(results) < 1:
+    # Check if any results
+    if results['results']:
+        print("True")
+        for item in results['results']['songs']['data']:
+            if title.lower() in item['attributes']['name'].lower():
+                if artist.lower() in item['attributes']['artistName'].lower():
+                    returnString = "[BETA] Apple Music: " + item['attributes']['url']
+                    return returnString
+                else:
+                    backupString = backupString + item['attributes']['name'] + "\n"
+    else:
         return False
-    for item in results['results']['songs']['data']:
-        if title.lower() in item['attributes']['name'].lower():
-            if artist.lower() in item['attributes']['artistName'].lower():
-                returnString = "[BETA] Apple Music: " + item['attributes']['url']
-                return returnString
-            else:
-                backupString = backupString + item['attributes']['name'] + "\n"
     if backupString != "":
         return backupString
     else:
@@ -148,15 +151,16 @@ async def searchMusicFromTerms(terms, types = None):
     returnString = ""
     backupString = ""
     results = am.search(terms, types=[types], limit=10)
-    if len(results) < 1:
-        return false
-    for item in results['results'][types]['data']:
-        if terms.lower() in item['attributes']['name'].lower():
-            returnString = item['attributes']['name'] + " by " + item['attributes']['artistName'] + ": " + item['attributes']['url']
-            return returnString
-        else:
-            backupString = backupString + "\n" + item['attributes']['name'] + " by " + item['attributes']['artistName']
-    return backupString
+    if results['']:
+        for item in results['results'][types]['data']:
+            if terms.lower() in item['attributes']['name'].lower():
+                returnString = item['attributes']['name'] + " by " + item['attributes']['artistName'] + ": " + item['attributes']['url']
+                return returnString
+            else:
+                backupString = backupString + "\n" + item['attributes']['name'] + " by " + item['attributes']['artistName']
+        return backupString
+    else:
+        return False
 
 async def getTrackIdFromUrl(songUrl):
     # Extract the song id from the song url
@@ -205,8 +209,7 @@ async def checkTrackInSpotifyPlaylist(trackId, spInstance):
 
 async def addSongToPlaylist(trackId, spInstance):
     # add song to playlist
-    await checkTrackInSpotifyPlaylist(trackId, spInstance)
-    # spInstance.playlist_add_items(playlist_id=SPOTIFY_PLAYLIST_ID, items=[trackId], position=None)
+    spInstance.playlist_add_items(playlist_id=SPOTIFY_PLAYLIST_ID, items=[trackId], position=None)
 
 
 
