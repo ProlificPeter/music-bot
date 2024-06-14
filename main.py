@@ -1,6 +1,7 @@
 import os
 import asyncio
 import random
+import sys
 
 import discord
 from dotenv import load_dotenv
@@ -10,7 +11,22 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from spotipy.oauth2 import SpotifyClientCredentials
 
-load_dotenv()
+# Set Environment Variables based on path
+envPathProd = os.path.join(os.path.dirname(__file__), '.env')
+envPathStage = os.path.join(os.path.dirname(__file__), '.env.stage')
+# Default Environment is Prod
+isProd = True
+envPath = envPathProd
+
+# Check if launched with staging argument
+if len(sys.argv) > 0:
+    print("Arguments fed.")
+    if "--staging" in sys.argv:
+        isProd = False
+        envPath = envPathStage
+
+
+load_dotenv(envPath)
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
@@ -23,6 +39,7 @@ SPOTIFY_PLAYLIST_ID = os.getenv('SPOTIFY_PLAYLIST_ID')
 
 # CONSTANTS
 SPOTIFY_TRACK_URL_HEADER = 'https://open.spotify.com/track/'
+APPLE_TRACK_URL_HEADER = 'https://music.apple.com/'
 
 # Default intents are now required to pass to Client
 intents = discord.Intents.all()
