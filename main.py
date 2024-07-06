@@ -249,7 +249,7 @@ async def on_message(message):
         return
     #  Check if it's in the dedicated channel, then Check for Spotify URL,
     if message.channel.id != CHANNEL_ID:
-        print("URL posted outside of dedicated channel")
+        # print("URL posted outside of dedicated channel")
         return
     if SPOTIFY_TRACK_URL_HEADER in message.content.lower():
         message_text = await handleSpotifyLink(message.content, True)
