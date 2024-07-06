@@ -81,9 +81,16 @@ async def handleCommand(command, message):
                 embed = discord.Embed(title=responseText, color=responseColor)
                 await message.channel.send(embed=embed)
                 # print(responseText)
+        case "!spotlify":
+            if len(cleanedMessage) < 2:
+                print(cleanedMessage)
+                return
+            if cleanedMessage[1].lower().startswith(APPLE_TRACK_URL_HEADER):
+                appleUrl = cleanedMessage[1]
+                # TODO: Create and add function to get Track ID from URL (similar to Spotify)
+                # Format is i=<TrackID> - possibly pull that via split
         case _:
             print("Whoops!")
-
 
 async def playlistCommand(spotifyUrl):
     trackId = await getTrackIdFromUrl(spotifyUrl)
