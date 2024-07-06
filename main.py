@@ -240,11 +240,11 @@ async def on_message(message):
     # Check if the message was from the bot -- ignore if so
     if message.author == client.user:
         return
-    # Check for Spotify URL, then check if it's in the dedicated channel
-    if message.content.startswith(SPOTIFY_TRACK_URL_HEADER):
-        if message.channel.id != CHANNEL_ID:
-            print("URL posted outside of dedicated channel")
-            return
+    #  Check if it's in the dedicated channel, then Check for Spotify URL,
+    if message.channel.id != CHANNEL_ID:
+        print("URL posted outside of dedicated channel")
+        return
+    if SPOTIFY_TRACK_URL_HEADER in message.content.lower():
         message_text = await handleSpotifyLink(message.content, True)
         embed = discord.Embed(title=message_text, color=HEX_GREEN)
         await message.channel.send(embed=embed)
