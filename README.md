@@ -1,11 +1,8 @@
-# discord_spotify
-Simple discord bot to add spotify songs to a playlist whenever a spotify link is posted in the chat
+# Music-Bot
+## Lobot
+Simple discord bot to add spotify songs to a playlist whenever a spotify link is posted in the chat, enhanced to also provide functionality to bridge the Spotify/Apple Music gap.
 
-There were several discord spotify bots available, but none of them were as simple as i wanted. I made this so the bot will 
-monitor a server/channel, and when a spotify song link is posted, it will add that song to a collaborative playlist, and then 
-send a small message that the song has been added. It's unobtrusive and simple, and allows people to share music easily.
-
-Edit your .env file with you discord tokens and keys. Run with python3 main.py. You may need to install dependencies.
+Edit your .env file with you discord tokens and keys. Run with python3.12 main.py. You may need to install dependencies. (Requires >= Python 3.10)
 
 You will need to create a bot/application in discord, give it the following permissions:
 - "bot"
@@ -14,6 +11,9 @@ You will need to create a bot/application in discord, give it the following perm
 - "Read messages/View Channels"
 - "Embed Links"
 
-Copy the invitation URL and invite the bot to your server.
+Spotify Authorization requires OAuth approval from the browser. If this needs to run on a headless server, you can run locally and copy cache file to your serveer.
 
-I tried to daemonize this but it wasnt working correctly. Instead I just run it in a screen session.
+Copy the invitation URL and invite the bot to your server.
+Currently runs in a screen session headless.
+
+This is a fork of [discord_spotify project from rundro](https://github.com/rundro/discord_spotify)
