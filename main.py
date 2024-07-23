@@ -2,6 +2,8 @@ import os
 import asyncio
 import random
 import sys
+import requests
+import json
 
 import discord
 from dotenv import load_dotenv
@@ -10,6 +12,7 @@ import applemusicpy
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from spotipy.oauth2 import SpotifyClientCredentials
+
 
 # Set Environment Variables based on path
 envPathProd = os.path.join(os.path.dirname(__file__), '.env')
@@ -36,10 +39,12 @@ APPLE_SECRET = os.getenv('APPLE_MUSIC_SECRET')
 SPOTIFYID = os.getenv('SPOTIFY_CLIENT_ID')
 SPOTIFYSECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
 SPOTIFY_PLAYLIST_ID = os.getenv('SPOTIFY_PLAYLIST_ID')
+KAGI_KEY = os.getenv('KAGI_KEY')
 
 # CONSTANTS
 SPOTIFY_TRACK_URL_HEADER = 'https://open.spotify.com/track/'
 APPLE_TRACK_URL_HEADER = 'https://music.apple.com/'
+FAST_API_URL = 'https://kagi.com/api/v0/fastgpt'
 
 # Default intents are now required to pass to Client
 intents = discord.Intents.all()
@@ -89,8 +94,52 @@ async def handleCommand(command, message):
                 appleUrl = cleanedMessage[1]
                 # TODO: Create and add function to get Track ID from URL (similar to Spotify)
                 # Format is i=<TrackID> - possibly pull that via split
+        case "!fastgpt":
+            if len(cleanedMessage) < 2:
+                print(cleanedMessage)
+                embed = discord.Embed(title="FORMAT ERROR", description="Invalid Arguments", color=HEX_RED)
+                await message.channel.send(embed=embed)
+                return
+            else:
+                embed = await askFastGpt(cleanedMessage[1])
+                await message.channel.send(embed=embed)
+        case "!spotisearch":
+            if len(cleanedMessage) < 2:
+                print(cleanedMessage)
         case _:
             print("Whoops!")
+
+async def askFastGpt(prompt):
+    references = "References:\n"
+    data = {
+    "query": prompt,
+    }
+    headers = {'Authorization': f'Bot {KAGI_KEY}'}
+    response = requests.post(FAST_API_URL, headers=headers, json=data)
+    jsonData = response.json()
+    if jsonData.get('data'):
+        tokens = jsonData['data']['tokens']
+        output = jsonData['data']['output']
+        if jsonData['data'].get('references'):
+            for refs in jsonData['data']['references']:
+                references = references + refs['url'] + '\n'
+        else:
+            references = ""
+        gptDescription = output + "\n\n" + references + "\n" + "Tokens required: " + str(tokens)
+        embed = discord.Embed(title="[ALPHA] FastGPT by Kagi", color=HEX_GREEN, description=gptDescription)
+        return embed
+    else:
+        embed = discord.Embed(title="[ALPHA] FastGPT by Kagi", description="Failed to Resolve Question", color=HEX_RED)
+        return embed
+
+
+# TODO: Finish this for providing API, currently WIP
+async def createGptApiPrompt(values, titleAndArtist):
+    jsonValues = " "
+    for value in values:
+        jsonValues = jsonValues + "\"" + value  + "\", "
+    prompt = "Responding only in JSON, expressed as {1} what are the Apple Music values for the song {2}".format(jsonValues, titleAndArtist)
+    return prompt
 
 async def playlistCommand(spotifyUrl):
     trackId = await getTrackIdFromUrl(spotifyUrl)
@@ -168,17 +217,66 @@ async def getMusicUrlFromTitleAndArtist(title, artist):
         return backupString
     else:
         return False
+# TODO: factor the search result handling into a separate function
+async def deepMusicSearch(title, artist, recursiveSearch = None, showHints = None):
+    am = await getMusicInstance()
+    searchTerm = title + " " + artist
+    returnString = ""
+    backupString = ""
+    probableArtists = []
+    if showHints == None:
+        hints = False
+    else:
+        hints = showHints
+    results = am.search(artist, types=['artists'], limit=10, hints=hints)
+    print(artist)
+    print(results)
+    if results['results'] and results['results'].get('artists'):
+        for item in results['results']['artists']['data']:
+            # print(item)
+            if item['id'] not in probableArtists:
+                probableArtists.append(item['id'])
+        returnString = await searchMusicTrackFromArtist(title, probableArtists, am)
+        return returnString
+    # If no results are returned and Hints have been enabled, try again based on hint recommendations
+    elif showHints and results['results']['terms'] and recursiveSearch:
+        for terms in results['results']['terms']:
+            returnString = await deepMusicSearch(title, terms)
+        return returnString
+    elif recursiveSearch:
+        returnString = await deepMusicSearch(title, artist, True, True)
+    else:
+        print("failed to fetch results")
+        return False
+
+async def searchMusicTrackFromArtist(title, artists, am):
+    probableTracks = []
+    for artist in artists:
+        print(artist)
+        results = am.artist_relationship(artist, relationship='songs')
+        if results['data']:
+            for relatedItem in results['data']:
+                print(relatedItem)
+                if title.lower() in relatedItem['attributes']['name'].lower():
+                    return relatedItem['attributes']['url']
+    return False
+
+# async def findTrackFromRelations():
+
 
 async def searchMusicFromTerms(terms, types = None):
     am = await getMusicInstance()
+    # Default type to Song unless otherwise specified for search
     types = "songs" if types is None else types
     returnString = ""
     backupString = ""
     results = am.search(terms, types=[types], limit=10)
-    if results['']:
+    # print(results)
+    if results['results']:
         for item in results['results'][types]['data']:
             if terms.lower() in item['attributes']['name'].lower():
                 returnString = item['attributes']['name'] + " by " + item['attributes']['artistName'] + ": " + item['attributes']['url']
+                print(returnString)
                 return returnString
             else:
                 backupString = backupString + "\n" + item['attributes']['name'] + " by " + item['attributes']['artistName']
@@ -193,7 +291,7 @@ async def getTrackIdFromUrl(songUrl):
     # song_id = ("spotify:track:" + track_id)
     return trackId
 
-async def handleSpotifyLink(songUrl, shouldAddToPlaylist = None):
+async def handleSpotifyLink(songUrl, shouldAddToPlaylist = None, deepSearch = None):
     # Get Spotify Auth
     sp = await getSpotifyInstance()
 
@@ -216,7 +314,10 @@ async def handleSpotifyLink(songUrl, shouldAddToPlaylist = None):
             tempMessageText = tempMessageTextLine1 + "\n" + tempMessageTextLine2 + "\n"
 
     # Attempt to find Apple Music link and append to message
-    appleMusicMessage = await getMusicUrlFromTitleAndArtist(trackName,trackArtist)
+    if deepSearch:
+        appleMusicMessage = await deepMusicSearch(trackName, trackArtist, True, False)
+    else:
+        appleMusicMessage = await getMusicUrlFromTitleAndArtist(trackName,trackArtist)
     if appleMusicMessage:
         tempMessageText = tempMessageText + appleMusicMessage
     else:
@@ -251,85 +352,90 @@ async def on_message(message):
     if message.channel.id != CHANNEL_ID:
         # print("URL posted outside of dedicated channel")
         return
+    # TODO: Fix the if statement to not fire when
     if SPOTIFY_TRACK_URL_HEADER in message.content.lower():
-        message_text = await handleSpotifyLink(message.content, True)
-        embed = discord.Embed(title=message_text, color=HEX_GREEN)
-        await message.channel.send(embed=embed)
-    else:
-        if client.user in message.mentions:
-            # Handle !hipster command request
-            if "!hipster" in message.content.lower():
-                cleanedMessage = message.content.split("!hipster ")
-                if len(cleanedMessage) < 2:
-                    # print(cleanedMessage)
-                    return
-                if cleanedMessage[1].startswith(SPOTIFY_TRACK_URL_HEADER):
-                    trackUrl = cleanedMessage[1]
-                    trackId = await getTrackIdFromUrl(trackUrl)
-                    track = await getTrackFromId(trackId)
-                    trackTitleAndArtist = await getTrackTitleAndArtist(track)
-                    popularityRating = await getAttributeFromTrack(track, 'popularity')
-                    hipsterText = await getHipsterRatingText(popularityRating)
-                    responseText = trackTitleAndArtist + ": " + hipsterText
-                    embed = discord.Embed(title=responseText, color=HEX_GREEN)
-                    await message.channel.send(embed=embed)
-                    print(responseText)
-                else:
-                    responseText = "Looks like a misformatted request, please make sure to use '!hipster' followed by a space, then the Spotify URL."
-                    embed = discord.Embed(title=responseText, color=0xff0000)
-                    await message.channel.send(embed=embed)
-                    # print(responseText)
-
-            # Handle !command request
-            elif "!command" in message.content.lower():
-                embed = discord.Embed(title="Lobot Available Commands", description="Be sure to @Lobot before adding your command!\n\n!hipster: Find hipster rating of Song based on Spotify URL\n\n!playlist: Check if Spotify song (url) is in the playlist without attempting to add.\n\n!applesearch looks for songs in Apple Music\n\n!applify searches the Spotify URL for Apple version; does not add link to the Playlist\n\n!command: Show list of commands", color=0x0000ff)
+        if client.user not in message.mentions:
+            message_text = await handleSpotifyLink(message.content, True)
+            embed = discord.Embed(title=message_text, color=HEX_GREEN)
+            await message.channel.send(embed=embed)
+            print("Client.user fired")
+    if client.user in message.mentions:
+        # Handle !hipster command request
+        if "!hipster" in message.content.lower():
+            cleanedMessage = message.content.split("!hipster ")
+            if len(cleanedMessage) < 2:
+                # print(cleanedMessage)
+                return
+            if cleanedMessage[1].startswith(SPOTIFY_TRACK_URL_HEADER):
+                trackUrl = cleanedMessage[1]
+                trackId = await getTrackIdFromUrl(trackUrl)
+                track = await getTrackFromId(trackId)
+                trackTitleAndArtist = await getTrackTitleAndArtist(track)
+                popularityRating = await getAttributeFromTrack(track, 'popularity')
+                hipsterText = await getHipsterRatingText(popularityRating)
+                responseText = trackTitleAndArtist + ": " + hipsterText
+                embed = discord.Embed(title=responseText, color=HEX_GREEN)
                 await message.channel.send(embed=embed)
+                print(responseText)
+            else:
+                responseText = "Looks like a misformatted request, please make sure to use '!hipster' followed by a space, then the Spotify URL."
+                embed = discord.Embed(title=responseText, color=0xff0000)
+                await message.channel.send(embed=embed)
+                # print(responseText)
+
+        # Handle !command request
+        elif "!command" in message.content.lower():
+            embed = discord.Embed(title="Lobot Available Commands", description="Be sure to @Lobot before adding your command!\n\n!hipster: Find hipster rating of Song based on Spotify URL\n\n!playlist: Check if Spotify song (url) is in the playlist without attempting to add.\n\n!applesearch looks for songs in Apple Music\n\n!applify searches the Spotify URL for Apple version; does not add link to the Playlist\n\n!command: Show list of commands", color=0x0000ff)
+            await message.channel.send(embed=embed)
                 # print("!command fired")
-            elif "!playlist" in message.content.lower():
-                await handleCommand("!playlist", message)
-            elif "!applify" in message.content.lower():
-                cleanedMessage = message.content.split("!applify ")
-                if len(cleanedMessage) < 2:
-                    print(cleanedMessage)
-                    return
-                if cleanedMessage[1].lower().startswith(SPOTIFY_TRACK_URL_HEADER):
-                    spotifyUrl = cleanedMessage[1]
-                    searchResult = await handleSpotifyLink(spotifyUrl, False)
-                    if searchResult:
-                        responseText = searchResult
-                        responseColor = HEX_GREEN
-                    else:
-                        responseText = "No match detected"
-                        responseColor = HEX_YELLOW
+        elif "!playlist" in message.content.lower():
+            await handleCommand("!playlist", message)
+        elif "!fastgpt" in message.content.lower():
+            await handleCommand("!fastgpt", message)
+        elif "!applify" in message.content.lower():
+            cleanedMessage = message.content.split("!applify ")
+            if len(cleanedMessage) < 2:
+                print(cleanedMessage)
+                return
+            if cleanedMessage[1].lower().startswith(SPOTIFY_TRACK_URL_HEADER):
+                spotifyUrl = cleanedMessage[1]
+                searchResult = await handleSpotifyLink(spotifyUrl, False, True)
+                if searchResult:
+                    responseText = searchResult
+                    responseColor = HEX_GREEN
+                else:
+                    responseText = "No match detected"
+                    responseColor = HEX_YELLOW
                     embed = discord.Embed(title="[BETA] Applify Results", description=responseText, color=responseColor)
                     await message.channel.send(embed=embed)
                     print(responseText)
-                else:
-                    responseText = "Looks like this is not a properly formatted Spotify URL."
-            # Handle !applesearch function
-            elif "!applesearch" in message.content.lower():
-                cleanedMessage = message.content.split("!applesearch ")
-                if len(cleanedMessage) < 2:
-                    print(cleanedMessage)
-                    return
-                if not cleanedMessage[1].lower().startswith("https"):
-                    searchQuery = cleanedMessage[1]
-                    searchResult = await searchMusicFromTerms(searchQuery, 'songs')
-                    if searchResult:
-                        responseText = searchResult
-                    else:
-                        responseText = "No match detected"
-                    embed = discord.Embed(title="Apple Search Results", description=responseText, color=HEX_GREEN)
-                    await message.channel.send(embed=embed)
-                    # print(responseText)
-                else:
-                    responseText = "Looks like you're trying to send a link instead of a search. Try using !applify instead."
-                    embed = discord.Embed(title=responseText, color=HEX_RED)
-                    await message.channel.send(embed=embed)
             else:
-                embed = discord.Embed(title="Hello, still working on myself; try checking out !command for available functions!", color=0xffff00)
+                responseText = "Looks like this is not a properly formatted Spotify URL."
+                # Handle !applesearch function
+        elif "!applesearch" in message.content.lower():
+            print("!applesearch fired")
+            cleanedMessage = message.content.split("!applesearch ")
+            if len(cleanedMessage) < 2:
+                print(cleanedMessage)
+                return
+            if not cleanedMessage[1].lower().startswith("https"):
+                searchQuery = cleanedMessage[1]
+                searchResult = await searchMusicFromTerms(searchQuery, 'songs')
+                if searchResult:
+                    responseText = searchResult
+                else:
+                    responseText = "No match detected"
+                embed = discord.Embed(title="Apple Search Results", description=responseText, color=HEX_GREEN)
                 await message.channel.send(embed=embed)
-                print("Failure fired")
+                # print(responseText)
+            else:
+                responseText = "Looks like you're trying to send a link instead of a search. Try using !applify instead."
+                embed = discord.Embed(title=responseText, color=HEX_RED)
+                await message.channel.send(embed=embed)
+        else:
+            embed = discord.Embed(title="Hello, still working on myself; try checking out !command for available functions!", color=0xffff00)
+            await message.channel.send(embed=embed)
+            print("Failure fired")
 
 
 
