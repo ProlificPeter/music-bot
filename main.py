@@ -103,6 +103,9 @@ async def handleCommand(command, message):
             else:
                 embed = await askFastGpt(cleanedMessage[1])
                 await message.channel.send(embed=embed)
+        case "!spotisearch":
+            if len(cleanedMessage) < 2:
+                print(cleanedMessage)
         case _:
             print("Whoops!")
 
@@ -130,7 +133,7 @@ async def askFastGpt(prompt):
         return embed
 
 
-
+# TODO: Finish this for providing API, currently WIP
 async def createGptApiPrompt(values, titleAndArtist):
     jsonValues = " "
     for value in values:
